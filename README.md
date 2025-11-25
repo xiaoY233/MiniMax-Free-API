@@ -17,7 +17,7 @@
 ## 更新说明
 
 1. 更新models.ts 模型列表，支持MiniMax-M2、MiniMax-M2-Stable等最新模型
-2. 将项目的所有API端点从 https://hailuoai.com 迁移到 https://agent.minimaxi.com，实现客户端通过代理服务进行AI问答交互
+2. 将项目的所有API端点从 `https://hailuoai.com` 迁移到 `https://agent.minimaxi.com`，实现客户端通过代理服务进行AI问答交互
 
 > PS：模型名称实际上并没啥用，只是方便和好看，实际上线上Chat调用是啥模型，就用的啥模型，模型名称随便填都可以。
 
