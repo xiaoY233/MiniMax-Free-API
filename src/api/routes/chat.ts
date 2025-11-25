@@ -1,0 +1,41 @@
+import _ from 'lodash';
+
+import Request from '@/lib/request/Request.ts';
+import Response from '@/lib/response/Response.ts';
+import core from '../controllers/core.ts';
+import chat from "@/api/controllers/chat-agent.ts";
+import { hasAnyRole } from "@/api/routes/token.ts";
+import APIException from "@/lib/exceptions/APIException.ts";
+import EX from "@/api/consts/exceptions.ts";
+import logger from "@/lib/logger.ts";
+import util from "@/lib/util.ts";
+
+export default {
+
+    prefix: '/v1/chat',
+
+    post: {
+
+        '/completions': async (request: Request) => {
+            request
+                .validate('body.conversation_id', v => _.isUndefined(v) || _.isString(v))
+                .validate('body.messages', _.isArray)
+                .validate('headers.authorization', _.isString)
+            // token切分
+            const tokens = core.tokenSplit(request.headers.authorization);
+            // 随机挑选一个token
+            const token = _.sample(tokens);
+            const { model, conversation_id: convId, messages, stream } = request.body;
+            if (stream) {
+                const stream = await chat.createAgentCompletionStream(model, messages, token);
+                return new Response(stream, {
+                    type: "text/event-stream"
+                });
+            }
+            else
+                return await chat.createAgentCompletion(model, messages, token);
+        }
+
+    }
+
+}
