@@ -382,6 +382,7 @@ function messagesPrepare(
     })) : [],
     selected_mcp_tools: [],
     backend_config: {},
+    sub_agent_ids: [], // 添加sub_agent_ids字段
   };
 }
 

@@ -1,4 +1,4 @@
-# MiniMax Hailuo AI Free 服务
+# MiniMax AI Free 服务
 
 ## 项目说明
 
@@ -23,6 +23,11 @@
 
 
 ### 版本说明
+
+- v1.0.1 (2025-12-07)
+    - 修复新注册账号401认证失败问题，改用realUserID和_token拼接的方式进行认证
+    - 重构默认首页样式和内容，更新为新版的页面
+    - 新增Gemini和Claude适配器
 
 - v1.0.0-fix (2025-11-24)
     - 修改默认首页样式，添加接入方式和示例代码
@@ -72,6 +77,24 @@
 
 ## 效果示例
 
+### 服务默认首页
+
+服务启动后，默认首页添加了接入指南和接口说明，方便快速接入，不用来回切换找文档。
+
+![index.html](./doc/index.png)
+
+### Gemini-cli接入
+
+版本添加了gemini-cli适配器，可以直接在gemini-cli中调用API。
+
+![gemini-cli](./doc/gemini-cli.png)
+
+### Claude-code接入
+
+版本添加了Claude-code适配器，可以直接在Claude-code中调用API。
+
+![claude-code](./doc/claude-code.png)
+
 ### 验明正身Demo
 
 ![验明正身](./doc/example-1.png)
@@ -108,9 +131,13 @@
 
 从 [Minimaxi-Agent](https://agent.minimaxi.com/) 获取token
 
-进入Minimaxi-Agent随便发起一个对话，然后F12打开开发者工具，从Application > LocalStorage中找到`_token`的值，这将作为Authorization的Bearer Token值：`Authorization: Bearer TOKEN`
+进入Minimaxi-Agent随便发起一个对话，然后F12打开开发者工具，从Application > LocalStorage中找到`_token`的值
 
 ![获取_token](./doc/example-0.png)
+
+点击user_detail_agent，找到realUserID的值，将realUserID和_token使用`+`号进行拼接，例如：450234567894+eyJhbGciOiJIUzI1NiI......
+
+这将作为Authorization的Bearer Token值：`Authorization: Bearer TOKEN`
 
 ### 多账号接入
 

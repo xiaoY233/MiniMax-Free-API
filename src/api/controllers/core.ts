@@ -76,15 +76,22 @@ async function requestDeviceInfo(token: string) {
   logger.info(`Token: ${token}`);
   const result = await (async () => {
     const userId = util.uuid();
+    // 解析token获取realUserID
+    const tokens = tokenSplit(token);
+    const realUserID = tokens[0];
+    const jwtToken = tokens[1];
+    
     const result = await request(
       "POST",
       "/v1/api/user/device/register",
       {
         uuid: userId,
       },
-      token,
+      jwtToken,
       {
-        userId,
+        userId: realUserID, // 使用realUserID而不是随机生成的userId
+        deviceId: null,
+        realUserID: realUserID
       },
       {
         params: FAKE_USER_DATA
@@ -93,7 +100,8 @@ async function requestDeviceInfo(token: string) {
     const { deviceIDStr } = checkResult(result);
     return {
       deviceId: deviceIDStr,
-      userId,
+      userId: realUserID, // 返回realUserID作为userId
+      realUserID: realUserID,
       refreshTime: util.unixTimestamp() + DEVICE_INFO_EXPIRES,
     };
   })()
@@ -283,12 +291,21 @@ function checkResult(result: AxiosResponse) {
 }
 
 /**
- * Token切分
+ * 解析认证字符串
  *
  * @param authorization 认证字符串
  */
 function tokenSplit(authorization: string) {
-  return authorization.replace("Bearer ", "").split(",");
+  const token = authorization.replace("Bearer ", "");
+  
+  // 检查是否是 realUserID+JWTtoken 格式（包含+号）
+  if (token.includes('+')) {
+    // realUserID+JWTtoken 格式，返回[JWTtoken]
+    return [token]; // 返回完整token供parseToken函数解析
+  }
+  
+  // 如果不包含+号，直接使用这个JWT token
+  return [token];
 }
 
 /**
@@ -312,9 +329,12 @@ async function request(
   const unix = `${Date.parse(new Date().toString())}`;
   const timestamp = Math.floor(Date.now() / 1000);
   const userData = _.clone(FAKE_USER_DATA);
-  userData.uuid = deviceInfo.userId;
+  
+  // 使用realUserID而不是从JWT解析的userId
+  const realUserID = deviceInfo.realUserID || deviceInfo.userId;
+  userData.uuid = realUserID;
   userData.device_id = deviceInfo.deviceId || undefined;
-  userData.user_id = deviceInfo.userId;
+  userData.user_id = realUserID;
   userData.unix = unix;
   userData.token = token;
   let queryStr = "";
@@ -330,6 +350,14 @@ async function request(
   );
   // 简单的签名实现 - 基于时间戳的MD5
   const signature = util.md5(`${timestamp}${token}${dataJson}`);
+  
+  // 记录详细的请求参数
+  logger.info(`[MiniMax API Request] URL: ${method} ${fullUri}`);
+  logger.info(`[MiniMax API Request] UserData: ${JSON.stringify(userData)}`);
+  logger.info(`[MiniMax API Request] Data: ${dataJson}`);
+  logger.info(`[MiniMax API Request] Token: ${token}`);
+  logger.info(`[MiniMax API Request] Headers Token: ${token}`);
+  
   return await axios.request({
     method,
     url: `${AGENT_BASE_URL}${fullUri}`,
@@ -339,12 +367,12 @@ async function request(
     ...options,
     headers: {
       Referer: "https://agent.minimaxi.com/",
-      Token: token,
+      token: token, // 使用小写token
       ...FAKE_HEADERS,
-      "X-Timestamp": `${timestamp}`,
-      "X-Signature": signature,
+      "x-timestamp": `${timestamp}`, // 使用小写x-timestamp
+      "x-signature": signature, // 使用小写x-signature
       ...(options.headers || {}),
-      Yy: yy,
+      yy: yy, // 使用小写yy
     },
   });
 }
@@ -370,9 +398,12 @@ async function requestStream(
   const unix = `${Date.parse(new Date().toString())}`;
   const timestamp = Math.floor(Date.now() / 1000);
   const userData = _.clone(FAKE_USER_DATA);
-  userData.uuid = deviceInfo.userId;
+  
+  // 使用realUserID而不是从JWT解析的userId
+  const realUserID = deviceInfo.realUserID || deviceInfo.userId;
+  userData.uuid = realUserID;
   userData.device_id = deviceInfo.deviceId || undefined;
-  userData.user_id = deviceInfo.userId;
+  userData.user_id = realUserID;
   userData.unix = unix;
   userData.token = token;
   let queryStr = "";
@@ -427,12 +458,12 @@ async function requestStream(
     ":scheme": "https",
     "content-type": contentType,
     Referer: "https://agent.minimaxi.com/",
-    Token: token,
+    token: token, // 使用小写token
     ...FAKE_HEADERS,
-    "X-Timestamp": `${timestamp}`,
-    "X-Signature": signature,
+    "x-timestamp": `${timestamp}`, // 使用小写x-timestamp
+    "x-signature": signature, // 使用小写x-signature
     ...(options.headers || {}),
-    Yy: yy,
+    yy: yy, // 使用小写yy
   };
 
   // 如果是 FormData，添加其 headers

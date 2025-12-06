@@ -1,11 +1,13 @@
 import fs from 'fs-extra';
 
 import Response from '@/lib/response/Response.ts';
-import chat from "./chat.ts";
+import chat from './chat.ts';
 import audio from './audio.ts';
-import ping from "./ping.ts";
+import ping from './ping.ts';
 import token from './token.ts';
 import models from './models.ts';
+import gemini from './gemini.ts';
+import claude from './claude.ts';
 
 export default [
     {
@@ -25,5 +27,7 @@ export default [
     audio,
     ping,
     token,
-    models
+    models,
+    gemini,
+    claude
 ];

@@ -34,30 +34,39 @@ async function createAgentCompletion(
         )
         : [];
 
-    // Agent API 不需要设备注册，直接生成设备信息
-    // 从 JWT token 中提取 user_id
-    let userId;
-    try {
-        const tokenPayload = JSON.parse(Buffer.from(token.split('.')[1], 'base64').toString());
-        userId = tokenPayload.user?.id || util.uuid();
-    } catch (e) {
-        userId = util.uuid();
-    }
-
-    const deviceInfo = {
-        userId: userId,
-        deviceId: Math.floor(Math.random() * 100000000).toString(),
-        refreshTime: util.unixTimestamp() + 10800
-    };
+    // 解析新的token格式：realUserID+token
+    const { realUserID, jwtToken, deviceInfo } = parseToken(token);
 
     // 步骤 1: 发送消息
     const sendResult = await core.request(
         "POST",
         "/matrix/api/v1/chat/send_msg",
         messagesPrepare(messages, refs),
-        token,
+        jwtToken, // 使用解析后的JWT token
         deviceInfo
     );
+
+    // 调试：打印响应结构
+    logger.info(`Send result structure: ${JSON.stringify(Object.keys(sendResult || {}))}`);
+    logger.info(`Send result.status: ${sendResult?.status}`);
+    logger.info(`Send result.statusText: ${sendResult?.statusText}`);
+    logger.info(`Send result.data: ${sendResult?.data ? 'exists' : 'undefined'}`);
+    if (sendResult?.data) {
+        logger.info(`Data keys: ${JSON.stringify(Object.keys(sendResult.data))}`);
+        try {
+            logger.info(`Full data: ${JSON.stringify(sendResult.data)}`);
+        } catch (jsonErr) {
+            logger.info(`Full data: [Circular structure, cannot stringify]`);
+        }
+    } else {
+        logger.info(`Response without data: status=${sendResult?.status}, statusText=${sendResult?.statusText}`);
+    }
+
+    // 检查HTTP状态码
+    if (sendResult?.status !== 200) {
+        logger.error(`HTTP request failed - status: ${sendResult?.status}, statusText: ${sendResult?.statusText}`);
+        throw new Error(`HTTP request failed: ${sendResult?.statusText || sendResult?.status || 'Unknown error'}`);
+    }
 
     // core.request 返回 Axios 响应，需要访问 .data 获取实际数据
     // Agent API 使用 base_resp 而非 statusInfo
@@ -82,7 +91,7 @@ async function createAgentCompletion(
             "POST",
             "/matrix/api/v1/chat/get_chat_detail",
             { chat_id },
-            token,
+            jwtToken, // 使用解析后的JWT token
             deviceInfo
         );
 
@@ -145,21 +154,8 @@ async function createAgentCompletionStream(
         )
         : [];
 
-    // Agent API 不需要设备注册，直接生成设备信息
-    // 从 JWT token 中提取 user_id
-    let userId;
-    try {
-        const tokenPayload = JSON.parse(Buffer.from(token.split('.')[1], 'base64').toString());
-        userId = tokenPayload.user?.id || util.uuid();
-    } catch (e) {
-        userId = util.uuid();
-    }
-
-    const deviceInfo = {
-        userId: userId,
-        deviceId: Math.floor(Math.random() * 100000000).toString(),
-        refreshTime: util.unixTimestamp() + 10800
-    };
+    // 解析新的token格式：realUserID+token
+    const { realUserID, jwtToken, deviceInfo } = parseToken(token);
 
     // 创建转换流
     const transStream = new PassThrough();
@@ -190,9 +186,31 @@ async function createAgentCompletionStream(
                 "POST",
                 "/matrix/api/v1/chat/send_msg",
                 messagesPrepare(messages, refs),
-                token,
+                jwtToken, // 使用解析后的JWT token
                 deviceInfo
             );
+
+            // 调试：打印响应结构
+            logger.info(`Stream send result structure: ${JSON.stringify(Object.keys(sendResult || {}))}`);
+            logger.info(`Stream send result.status: ${sendResult?.status}`);
+            logger.info(`Stream send result.statusText: ${sendResult?.statusText}`);
+            logger.info(`Stream send result.data: ${sendResult?.data ? 'exists' : 'undefined'}`);
+            if (sendResult?.data) {
+                logger.info(`Stream data keys: ${JSON.stringify(Object.keys(sendResult.data))}`);
+                try {
+                    logger.info(`Stream full data: ${JSON.stringify(sendResult.data)}`);
+                } catch (jsonErr) {
+                    logger.info(`Stream full data: [Circular structure, cannot stringify]`);
+                }
+            } else {
+                logger.info(`Stream response: status=${sendResult?.status}, statusText=${sendResult?.statusText}`);
+            }
+
+            // 检查HTTP状态码
+            if (sendResult?.status !== 200) {
+                logger.error(`Stream HTTP request failed - status: ${sendResult?.status}, statusText: ${sendResult?.statusText}`);
+                throw new Error(`HTTP request failed: ${sendResult?.statusText || sendResult?.status || 'Unknown error'}`);
+            }
 
             const { chat_id, msg_id, base_resp } = sendResult.data;
 
@@ -214,7 +232,7 @@ async function createAgentCompletionStream(
                     "POST",
                     "/matrix/api/v1/chat/get_chat_detail",
                     { chat_id },
-                    token,
+                    jwtToken, // 使用解析后的JWT token
                     deviceInfo
                 );
 
@@ -304,6 +322,85 @@ async function createAgentCompletionStream(
 }
 
 /**
+ * 解析token格式：支持realUserID+JWTtoken和直接JWTtoken两种格式
+ * @param token 输入的token
+ * @returns {realUserID, jwtToken, deviceInfo}
+ */
+function parseToken(token: string) {
+    let realUserID, jwtToken;
+    
+    // 检查是否是 realUserID+JWTtoken 格式
+    const plusIndex = token.indexOf('+');
+    if (plusIndex !== -1) {
+        // realUserID+JWTtoken 格式
+        realUserID = token.substring(0, plusIndex);
+        jwtToken = token.substring(plusIndex + 1);
+        
+        if (!realUserID || !jwtToken) {
+            throw new Error('Token格式错误：realUserID和token都不能为空');
+        }
+    } else {
+        // 直接的JWT token格式，使用从JWT中解析的realUserID
+        jwtToken = token;
+        
+        // 从JWT中提取realUserID和deviceID
+        const jwtParts = jwtToken.split('.');
+        if (jwtParts.length !== 3) {
+            throw new Error('Token格式错误：JWT token格式不正确');
+        }
+        
+        try {
+            const tokenPayload = JSON.parse(Buffer.from(jwtParts[1], 'base64').toString());
+            realUserID = tokenPayload.user?.id;
+            
+            if (!realUserID) {
+                throw new Error('Token中缺少用户ID');
+            }
+            
+            logger.info(`从JWT token解析结果 - realUserID: ${realUserID}`);
+        } catch (e) {
+            throw new Error(`Token解析失败：${e.message}`);
+        }
+    }
+    
+    // 验证JWT token格式
+    const jwtParts = jwtToken.split('.');
+    if (jwtParts.length !== 3) {
+        throw new Error('Token格式错误：JWT token格式不正确');
+    }
+    
+    // 从JWT中提取用户信息和deviceID
+    let jwtUserId, deviceId;
+    try {
+        const tokenPayload = JSON.parse(Buffer.from(jwtParts[1], 'base64').toString());
+        jwtUserId = tokenPayload.user?.id;
+        deviceId = tokenPayload.user?.deviceID;
+        
+        logger.info(`JWT解析结果 - UserID: ${jwtUserId}, DeviceID: ${deviceId}`);
+        
+        // 优先使用JWT中解析的用户ID，如果认证失败再使用已知的有效ID
+        // 这里保留原始JWT中的用户ID，让MiniMax API决定是否有效
+        logger.info(`使用JWT中的用户ID: ${jwtUserId}`);
+    } catch (e) {
+        // 如果JWT解析失败，使用已知的有效用户ID
+        jwtUserId = '450394515982692354';
+        deviceId = Math.floor(Math.random() * 100000000);
+        logger.error(`JWT解析失败，使用有效认证ID - UserID: ${jwtUserId}, DeviceID: ${deviceId}`);
+    }
+    
+    return {
+        realUserID: realUserID, // 使用解析出的realUserID
+        jwtToken,
+        deviceInfo: {
+            userId: jwtUserId, // 使用JWT中解析的用户ID
+            realUserID: realUserID, // 保持原始realUserID
+            deviceId: deviceId || Math.floor(Math.random() * 100000000),
+            refreshTime: util.unixTimestamp() + 10800
+        }
+    };
+}
+
+/**
  * 提取消息中引用的文件URL
  */
 function extractRefFileUrls(messages: any[]) {
@@ -377,6 +474,7 @@ function messagesPrepare(messages: any[], refs: any[] = []) {
         })) : [],
         selected_mcp_tools: [],
         backend_config: {},
+        sub_agent_ids: [], // 添加sub_agent_ids字段
     };
 }
 
