@@ -4,6 +4,8 @@
 
 <span>[ 中文 | <a href="README_EN.md">English</a> ]</span>
 
+> ✨✨ 新项目[https://github.com/xiaoY233/Chat2API](https://github.com/xiaoY233/Chat2API)已经上线，后续统一进行更新维护，此项目不再更新了
+
 支持最新MiniMax-M2、MiniMax-M2-Stable模型型，支持高速流式输出、支持多轮对话、支持语音合成、语音识别、支持联网搜索、支持长文档解读、支持图像解析，零配置部署，多路token支持，自动清理会话痕迹。
 
 
